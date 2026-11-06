@@ -1,4 +1,4 @@
-name: delo-efir
+name: vscode-live
 services:
   api:
     image: ${IMAGE_PREFIX:?}/api:${RELEASE:?}

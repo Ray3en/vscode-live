@@ -4,16 +4,16 @@ on:
     branches: [prod]
   workflow_dispatch:
 concurrency:
-  group: delo-efir-prod
+  group: vscode-live-prod
   cancel-in-progress: false
 permissions:
   contents: read
-  packages: write
 jobs:
   deploy:
     if: github.ref == 'refs/heads/prod'
     runs-on: ubuntu-latest
-    environment: production
+    environment:
+      name: production
     steps:
       - uses: actions/checkout@v4
       - name: Build both images
@@ -34,29 +34,21 @@ jobs:
           docker compose up -d --wait --wait-timeout 90
           curl -fsS http://127.0.0.1:18081/ | grep -q 'Эфир'
           node deploy/smoke.mjs http://127.0.0.1:18081
-      - name: Publish tested images
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          docker push "$IMAGE_PREFIX/api:$RELEASE"
-          docker push "$IMAGE_PREFIX/web:$RELEASE"
       - name: Deploy over SSH
         env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
-          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+          DEPLOY_DIR: ${{ secrets.DEPLOY_DIR }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
         run: |
           set -euo pipefail
           install -d -m 700 ~/.ssh
-          (umask 077; printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy)
-          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-          ssh_opts=(-i ~/.ssh/id_deploy -p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
-          remote="$DEPLOY_USER@$DEPLOY_HOST"
-          dir="/var/www/delo-efir/releases/$RELEASE"
-          ssh "${ssh_opts[@]}" "$remote" "test -s /var/www/delo-efir/.env && mkdir -p '$dir'"
+          (umask 077; printf '%s\n' "$PRIVATE_KEY" > ~/.ssh/id_deploy)
+          ssh-keyscan -H "$SSH_HOST" > ~/.ssh/known_hosts
+          ssh_opts=(-i ~/.ssh/id_deploy -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          remote="$SSH_USER@$SSH_HOST"
+          dir="${DEPLOY_DIR%/}/releases/$RELEASE"
+          ssh "${ssh_opts[@]}" "$remote" "test -s '${DEPLOY_DIR%/}/.env' && mkdir -p '$dir'"
           printf 'IMAGE_PREFIX=%s\nRELEASE=%s\n' "$IMAGE_PREFIX" "$RELEASE" > release.env
           tar czf - compose.yaml release.env deploy/activate.sh | ssh "${ssh_opts[@]}" "$remote" "tar xzf - -C '$dir'"
           docker save "$IMAGE_PREFIX/api:$RELEASE" "$IMAGE_PREFIX/web:$RELEASE" | gzip -1 | ssh "${ssh_opts[@]}" "$remote" 'gzip -dc | docker load'

@@ -6,29 +6,36 @@
 
 Для пользователя deploy с доступом к Docker:
 
-    sudo install -d -m 750 -o deploy -g deploy /var/www/delo-efir
-    sudo -u deploy sh -c 'umask 077; test -e /var/www/delo-efir/.env || printf "HOST_KEY=%s\n" "$(openssl rand -hex 32)" > /var/www/delo-efir/.env'
+    sudo install -d -m 750 -o deploy -g deploy /var/www/vscode-live
+    sudo -u deploy sh -c 'umask 077; test -e /var/www/vscode-live/.env || printf "HOST_KEY=%s\n" "$(openssl rand -hex 32)" > /var/www/vscode-live/.env'
     sudo -iu deploy docker compose version
 
 Положите публичный ключ деплоя в ~deploy/.ssh/authorized_keys. Секрет HOST_KEY понадобится только ведущим. Для внешнего Nginx выбран свободный локальный порт 18081. Если меняете его, задайте HTTP_PORT в .env и поменяйте upstream в deploy/host.conf.
 
 ## 2. GitHub
 
-Создайте Environment production. Добавьте Secrets DEPLOY_HOST, DEPLOY_SSH_KEY (приватный ключ) и DEPLOY_KNOWN_HOSTS (проверенная строка known_hosts для этого сервера; для нестандартного порта имя имеет вид [host]:port). Variables DEPLOY_USER и DEPLOY_PORT по умолчанию равны deploy и 22. Actions должны иметь возможность публиковать пакеты GHCR репозитория.
+Создайте Environment `production` и добавьте в него четыре Secrets:
+
+- `DEPLOY_DIR` — каталог на сервере, например `/var/www/vscode-live`;
+- `SSH_HOST` — DNS-имя или IP-адрес сервера;
+- `SSH_USER` — SSH-пользователь, например `deploy`;
+- `PRIVATE_KEY` — приватный SSH-ключ целиком, включая строки `BEGIN` и `END`.
+
+Workflow рассчитан на стандартный SSH-порт 22 и при деплое сам добавляет ключ хоста в `known_hosts`. Собранные Docker-образы передаются на сервер напрямую по SSH, без публикации в GHCR.
 
 В существующем проекте переключитесь на prod (git switch prod или git switch -c prod для новой ветки), добавьте файлы архива в корень и проверьте git status. Затем:
 
     git add .github Dockerfile .dockerignore .gitignore compose.yaml deploy web extension server.js README.md
-    git commit -m "Deploy Delo Efir from prod"
+    git commit -m "Deploy vscode-live from prod"
     git push -u origin prod
 
-CI поднимает Compose, проверяет HTML и API через Nginx, публикует образы и разворачивает их по SSH. Предыдущая исправная конфигурация хранится в /var/www/delo-efir/current. При ошибке проверки контейнеров скрипт пытается восстановить предыдущий релиз. Образы старых релизов занимают место; сохраняйте образы для нужной глубины отката.
+CI поднимает Compose, проверяет HTML и API через Nginx, передаёт образы и разворачивает их по SSH. Предыдущая исправная конфигурация хранится в /var/www/vscode-live/current. При ошибке проверки контейнеров скрипт пытается восстановить предыдущий релиз. Образы старых релизов занимают место; сохраняйте образы для нужной глубины отката.
 
 ## 3. Внешний домен
 
-Направьте DNS своего поддомена на Ubuntu. Скопируйте deploy/host.conf в /etc/nginx/sites-available/delo-efir, замените efir.example.org на свой поддомен и выполните:
+Направьте DNS своего поддомена на Ubuntu. Скопируйте deploy/host.conf в /etc/nginx/sites-available/vscode-live, замените efir.example.org на свой поддомен и выполните:
 
-    sudo ln -s /etc/nginx/sites-available/delo-efir /etc/nginx/sites-enabled/delo-efir
+    sudo ln -s /etc/nginx/sites-available/vscode-live /etc/nginx/sites-enabled/vscode-live
     sudo nginx -t && sudo systemctl reload nginx
     sudo certbot --nginx -d ВАШ_ПОДДОМЕН
     curl -fsS https://ВАШ_ПОДДОМЕН/healthz

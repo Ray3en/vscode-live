@@ -1,0 +1,8 @@
+*
+!web/
+!web/**
+!deploy/
+deploy/*
+!deploy/container.conf
+!server.js
+!Dockerfile

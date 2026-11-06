@@ -1,0 +1,25 @@
+name: delo-efir
+services:
+  api:
+    image: ${IMAGE_PREFIX:?}/api:${RELEASE:?}
+    environment:
+      HOST_KEY: ${HOST_KEY:?Set HOST_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7341/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 6
+  web:
+    image: ${IMAGE_PREFIX:?}/web:${RELEASE:?}
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-18081}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:8080/healthz && wget -qO /dev/null http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 6

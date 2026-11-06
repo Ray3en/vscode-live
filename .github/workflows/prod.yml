@@ -1,0 +1,63 @@
+name: Publish and deploy prod
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch:
+concurrency:
+  group: delo-efir-prod
+  cancel-in-progress: false
+permissions:
+  contents: read
+  packages: write
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/prod'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build both images
+        run: |
+          prefix="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "IMAGE_PREFIX=$prefix" >> "$GITHUB_ENV"
+          echo "RELEASE=$GITHUB_SHA" >> "$GITHUB_ENV"
+          docker build --target api -t "$prefix/api:$GITHUB_SHA" .
+          docker build --target web -t "$prefix/web:$GITHUB_SHA" .
+      - name: Test through Nginx
+        env:
+          HOST_KEY: ci-test-only
+        run: |
+          set -euo pipefail
+          trap 'docker compose down' EXIT
+          node --check web/app.js
+          node --check extension/extension.js
+          docker compose up -d --wait --wait-timeout 90
+          curl -fsS http://127.0.0.1:18081/ | grep -q 'Эфир'
+          node deploy/smoke.mjs http://127.0.0.1:18081
+      - name: Publish tested images
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE_PREFIX/api:$RELEASE"
+          docker push "$IMAGE_PREFIX/web:$RELEASE"
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER || 'deploy' }}
+          DEPLOY_PORT: ${{ vars.DEPLOY_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          install -d -m 700 ~/.ssh
+          (umask 077; printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy)
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh_opts=(-i ~/.ssh/id_deploy -p "$DEPLOY_PORT" -o BatchMode=yes -o StrictHostKeyChecking=yes)
+          remote="$DEPLOY_USER@$DEPLOY_HOST"
+          dir="/var/www/delo-efir/releases/$RELEASE"
+          ssh "${ssh_opts[@]}" "$remote" "test -s /var/www/delo-efir/.env && mkdir -p '$dir'"
+          printf 'IMAGE_PREFIX=%s\nRELEASE=%s\n' "$IMAGE_PREFIX" "$RELEASE" > release.env
+          tar czf - compose.yaml release.env deploy/activate.sh | ssh "${ssh_opts[@]}" "$remote" "tar xzf - -C '$dir'"
+          docker save "$IMAGE_PREFIX/api:$RELEASE" "$IMAGE_PREFIX/web:$RELEASE" | gzip -1 | ssh "${ssh_opts[@]}" "$remote" 'gzip -dc | docker load'
+          ssh "${ssh_opts[@]}" "$remote" "cd '$dir' && mv -f deploy/activate.sh activate.sh && bash activate.sh"

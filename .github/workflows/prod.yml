@@ -40,12 +40,17 @@ jobs:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_USER: ${{ secrets.SSH_USER }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          APP_ENV: ${{ secrets.ENV }}
         run: |
           set -euo pipefail
           install -d -m 700 ~/.ssh
           (umask 077; printf '%s\n' "$PRIVATE_KEY" > ~/.ssh/id_deploy)
           if ! ssh-keygen -y -f ~/.ssh/id_deploy > /dev/null; then
             echo "PRIVATE_KEY is not a valid SSH private key" >&2
+            exit 1
+          fi
+          if ! printf '%s\n' "$APP_ENV" | grep -Eq '^HOST_KEY=.+$'; then
+            echo "ENV must contain a non-empty HOST_KEY value" >&2
             exit 1
           fi
           ssh_opts=(
@@ -55,9 +60,19 @@ jobs:
             -o StrictHostKeyChecking=accept-new
           )
           remote="$SSH_USER@$SSH_HOST"
-          dir="${DEPLOY_DIR%/}/releases/$RELEASE"
+          root="${DEPLOY_DIR%/}"
+          dir="$root/releases/$RELEASE"
           echo "Connecting to SSH host on port 22..."
-          ssh "${ssh_opts[@]}" "$remote" "test -s '${DEPLOY_DIR%/}/.env' && mkdir -p '$dir'"
+          printf '%s\n' "$APP_ENV" | ssh "${ssh_opts[@]}" "$remote" "
+            set -e
+            mkdir -p '$root' '$dir'
+            if [ ! -s '$root/.env' ]; then
+              umask 077
+              cat > '$root/.env'
+            else
+              cat > /dev/null
+            fi
+          "
           printf 'IMAGE_PREFIX=%s\nRELEASE=%s\n' "$IMAGE_PREFIX" "$RELEASE" > release.env
           tar czf - compose.yaml release.env deploy/activate.sh | ssh "${ssh_opts[@]}" "$remote" "tar xzf - -C '$dir'"
           docker save "$IMAGE_PREFIX/api:$RELEASE" "$IMAGE_PREFIX/web:$RELEASE" | gzip -1 | ssh "${ssh_opts[@]}" "$remote" 'gzip -dc | docker load'

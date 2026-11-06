@@ -6,20 +6,19 @@
 
 Для пользователя deploy с доступом к Docker:
 
-    sudo install -d -m 750 -o deploy -g deploy /var/www/vscode-live
-    sudo -u deploy sh -c 'umask 077; test -e /var/www/vscode-live/.env || printf "HOST_KEY=%s\n" "$(openssl rand -hex 32)" > /var/www/vscode-live/.env'
     sudo -iu deploy docker compose version
 
-Положите публичный ключ деплоя в ~deploy/.ssh/authorized_keys. Секрет HOST_KEY понадобится только ведущим. Для внешнего Nginx выбран свободный локальный порт 18081. Если меняете его, задайте HTTP_PORT в .env и поменяйте upstream в deploy/host.conf.
+Положите публичный ключ деплоя в ~deploy/.ssh/authorized_keys. Каталог `DEPLOY_DIR` и файл `.env` создаются workflow при первом деплое; SSH-пользователь должен иметь право записи в родительский каталог. Секрет HOST_KEY понадобится только ведущим. Для внешнего Nginx выбран свободный локальный порт 18081. Если меняете его, задайте HTTP_PORT в .env и поменяйте upstream в deploy/host.conf.
 
 ## 2. GitHub
 
-Создайте Environment `production` и добавьте в него четыре Secrets:
+Создайте Environment `production` и добавьте в него пять Secrets:
 
 - `DEPLOY_DIR` — каталог на сервере, например `/var/www/vscode-live`;
 - `SSH_HOST` — DNS-имя или IP-адрес сервера;
 - `SSH_USER` — SSH-пользователь, например `deploy`;
-- `PRIVATE_KEY` — приватный SSH-ключ целиком, включая строки `BEGIN` и `END`.
+- `PRIVATE_KEY` — приватный SSH-ключ целиком, включая строки `BEGIN` и `END`;
+- `ENV` — содержимое серверного `.env`, например `HOST_KEY=...`. Workflow записывает его только если `.env` отсутствует или пуст.
 
 Workflow рассчитан на стандартный SSH-порт 22 и при деплое сам добавляет ключ хоста в `known_hosts`. Собранные Docker-образы передаются на сервер напрямую по SSH, без публикации в GHCR.
 

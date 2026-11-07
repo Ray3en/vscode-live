@@ -5,4 +5,7 @@
 deploy/*
 !deploy/container.conf
 !server.js
+!extension/
+extension/*
+!extension/efir-0.2.0.vsix
 !Dockerfile

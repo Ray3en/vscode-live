@@ -9,3 +9,4 @@ CMD ["node","server.js"]
 FROM nginx:stable-alpine AS web
 COPY deploy/container.conf /etc/nginx/conf.d/default.conf
 COPY web/ /usr/share/nginx/html/
+COPY extension/efir-0.2.0.vsix /usr/share/nginx/html/efir-0.2.0.vsix

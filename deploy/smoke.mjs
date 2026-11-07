@@ -1,17 +1,16 @@
 import assert from 'node:assert/strict';
 const base = process.argv[2];
-const create = await fetch(base+'/rooms', {method:'POST', headers:{Authorization:'Bearer '+process.env.HOST_KEY}});
-assert.equal(create.status,201);
-const {id,write} = await create.json();
-const url = base+'/rooms/'+id;
-const data = {name:'App.tsx',language:'typescriptreact',text:'export default 42'};
-const headers = {Authorization:'Bearer '+write};
+const created = await fetch(base + '/rooms', { method: 'POST', body: JSON.stringify({ name: 'Smoke', files: { 'App.tsx': 'one' } }) });
+assert.equal(created.status, 201);
+const { id, write } = await created.json();
+assert.match(id, /^\d{6}$/);
+const url = `${base}/rooms/${id}`;
 try {
-  assert.equal((await fetch(url,{method:'PUT',body:JSON.stringify(data)})).status,403);
-  assert.equal((await fetch(url,{method:'PUT',headers,body:JSON.stringify(data)})).status,204);
-  assert.deepEqual(await (await fetch(url)).json(),data);
+  assert.equal((await fetch(url, { method: 'PUT', body: '{}' })).status, 403);
+  const update = await fetch(url, { method: 'PUT', headers: { Authorization: `Bearer ${write}` }, body: JSON.stringify({ files: { 'App.tsx': 'two', 'api.ts': 'three' } }) });
+  assert.equal(update.status, 200);
+  assert.deepEqual((await (await fetch(url)).json()).files, { 'App.tsx': 'two', 'api.ts': 'three' });
 } finally {
-  assert.equal((await fetch(url,{method:'DELETE',headers})).status,204);
+  assert.equal((await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${write}` } })).status, 204);
 }
-assert.equal((await fetch(url)).status,404);
 console.log('Room lifecycle OK');

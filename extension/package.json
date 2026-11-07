@@ -1,18 +1,29 @@
 {
   "name": "code-stream-classroom",
-  "displayName": "Code Stream Classroom",
+  "displayName": "Эфир",
   "publisher": "classroom-tools",
-  "version": "0.1.0",
-  "description": "Stream one editor document to read-only viewers.",
+  "version": "0.2.0",
+  "description": "Комнаты для трансляции кода из VS Code.",
   "engines": { "vscode": "^1.96.0" },
   "main": "./extension.js",
   "extensionKind": ["ui"],
   "contributes": {
     "commands": [
-      {"command":"codeStream.start","title":"Code Stream: Start"},
-      {"command":"codeStream.join","title":"Code Stream: Join"},
-      {"command":"codeStream.copy","title":"Code Stream: Copy Invite"},
-      {"command":"codeStream.stop","title":"Code Stream: Stop"}
-    ]
+      {"command":"efir.start","title":"Эфир: Создать комнату"},
+      {"command":"efir.join","title":"Эфир: Войти по коду"},
+      {"command":"efir.openFile","title":"Эфир: Открыть файл"},
+      {"command":"efir.copy","title":"Эфир: Скопировать код"},
+      {"command":"efir.stop","title":"Эфир: Завершить"}
+    ],
+    "configuration": {
+      "title": "Эфир",
+      "properties": {
+        "efir.serverUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:18081",
+          "description": "HTTPS-адрес сервера Эфир без завершающего /."
+        }
+      }
+    }
   }
 }

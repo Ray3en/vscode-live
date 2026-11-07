@@ -9,7 +9,8 @@ async function api(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 function token() { return room && owners[room.id]; }
-function connection() { return `<aside class="panel"><h3>Соединение</h3><p class="pill ${online?'':'off'}">${online?'Подключено':'Отключено'}</p><p class="muted">Сервер комнат · общий режим</p><button data-act="network">${online?'Отключить':'Восстановить соединение'}</button></aside>`; }
+function connection(inRoom=false) { const nav=inRoom?`<div class="side-nav"><h3>Комната</h3><button data-act="leave">← Все комнаты</button><button data-act="copy">Код: ${room.id}　⧉</button><p class="muted">${token()?'Преподаватель':'Студент · Только чтение'}</p></div>`:'';return `<aside class="panel">${nav}<div class="connection"><h3>Соединение</h3><p class="pill ${online?'':'off'}">${online?'Подключено':'Отключено'}</p><p class="muted">Сервер комнат · общий режим</p><button data-act="network">${online?'Отключить':'Восстановить соединение'}</button></div></aside>`; }
+function highlight(source,name){if(!/\.(jsx|tsx)$/i.test(name))return esc(source);const re=/(\/\*[\s\S]*?\*\/|\/\/[^\n]*|`(?:\\.|[^`])*`|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|<\/?[A-Za-z][^>]*>|\b(?:import|from|export|default|const|let|var|function|return|if|else|for|while|async|await|class|extends|interface|type|enum|new|throw|try|catch|finally|typeof|instanceof|true|false|null|undefined)\b|\b\d+(?:\.\d+)?\b)/g;let out='',last=0;for(const m of source.matchAll(re)){out+=esc(source.slice(last,m.index));const v=m[0],kind=v.startsWith('//')||v.startsWith('/*')?'comment':v.startsWith('<')?'tag':/^["'`]/.test(v)?'string':/^\d/.test(v)?'number':'keyword';out+=`<span class="tok-${kind}">${esc(v)}</span>`;last=m.index+v.length;}return out+esc(source.slice(last))+'\n';}
 function render() {
   const crumb = '<div class="crumb">Рабочее пространство　/　Комнаты</div>';
   if (!room) {
@@ -18,9 +19,9 @@ function render() {
   }
   const host = Boolean(token()), names = Object.keys(room.files);
   if (!names.includes(file)) file = names[0] || '';
-  $('app').innerHTML = `${crumb}<div class="top"><h1>${esc(room.name)}</h1></div><div class="actions"><button data-act="leave">← Комнаты</button><button data-act="copy">Код: ${room.id}　⧉</button><span class="muted">${host?'Преподаватель':'Студент · Только чтение'}</span></div><div class="grid"><section><div class="workspace"><div class="tree"><h3>Файлы эфира</h3>${names.map(n=>`<button class="${file===n?'sel':''}" data-file="${esc(n)}">${esc(n)}</button>`).join('')}${host?'<button data-act="add">＋ Добавить файл</button>':''}</div><div class="editor"><label for="code">${esc(file)}</label><textarea id="code" spellcheck="false" ${host&&online?'':'readonly'}></textarea></div></div></section>${connection()}</div>`;
-  const editor = $('code'); editor.value = room.files[file] || '';
-  editor.oninput = e => { room.files[file] = e.target.value; clearTimeout(saveTimer); saveTimer = setTimeout(save, 180); };
+  $('app').innerHTML = `${crumb}<div class="top room-title"><h1>${esc(room.name)}</h1></div><div class="grid room-grid"><section><div class="workspace"><div class="tree"><h3>Файлы эфира</h3>${names.map(n=>`<button class="${file===n?'sel':''}" data-file="${esc(n)}">${esc(n)}</button>`).join('')}${host?'<button data-act="add">＋ Добавить файл</button>':''}</div><div class="editor"><label for="code">${esc(file)}</label><div class="code-editor"><pre id="highlight" aria-hidden="true"></pre><textarea id="code" spellcheck="false" ${host&&online?'':'readonly'}></textarea></div></div></div></section>${connection(true)}</div>`;
+  const editor=$('code'),layer=$('highlight');editor.value=room.files[file]||'';const paint=()=>{layer.innerHTML=highlight(editor.value,file);layer.scrollTop=editor.scrollTop;layer.scrollLeft=editor.scrollLeft;};paint();editor.onscroll=paint;
+  editor.oninput=e=>{room.files[file]=e.target.value;paint();clearTimeout(saveTimer);saveTimer=setTimeout(save,180);};
 }
 async function save() {
   if (!online || !token()) return;
